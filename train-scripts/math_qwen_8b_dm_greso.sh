@@ -27,7 +27,7 @@ export WANDB_MODE="online"  # or "offline", "disabled"
 export HYDRA_FULL_ERROR=1
 # export WANDB_RESUME='must'
 
-experiment_name="qwen3-greso-paper-batch128-cliph0_28-clipl0_2-clipc3-nokl-lr1e-6-binreward"
+experiment_name="qwen3-8b-greso-paper-batch128-cliph0_28-clipl0_2-clipc3-nokl-lr1e-6-binreward"
 save_path="./models/$experiment_name"
 freq=15
 rollout=8
@@ -47,16 +47,16 @@ python3 -m verl.trainer.main_ppo \
     +data.real_train_batch_size=128 \
     data.val_batch_size=512 \
     data.max_prompt_length=1024 \
-    data.max_response_length=4096 \
+    data.max_response_length=8192 \
     data.filter_overlong_prompts=True \
     data.truncation='error' \
-    actor_rollout_ref.model.path=Qwen/Qwen3-1.7B-Base \
+    actor_rollout_ref.model.path=Qwen/Qwen3-8B-Base \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.actor.ppo_mini_batch_size=64 \
     actor_rollout_ref.actor.use_dynamic_bsz=True \
-    actor_rollout_ref.actor.ppo_max_token_len_per_gpu=$(((1024 + 4096) * 4)) \
+    actor_rollout_ref.actor.ppo_max_token_len_per_gpu=$(((1024 + 8192) * 4)) \
     +ttis.type=dynamic_sampling \
     actor_rollout_ref.actor.use_kl_loss=False \
     actor_rollout_ref.actor.kl_loss_coef=0.0 \
@@ -77,7 +77,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.val_kwargs.top_k=-1 \
     actor_rollout_ref.rollout.val_kwargs.top_p=0.95 \
     actor_rollout_ref.rollout.val_kwargs.n=$rollout \
-    actor_rollout_ref.rollout.max_num_batched_tokens=$(((1024 + 4096) * 32)) \
+    actor_rollout_ref.rollout.max_num_batched_tokens=$(((1024 + 8192) * 32)) \
     actor_rollout_ref.ref.fsdp_config.param_offload=False \
     algorithm.kl_ctrl.kl_coef=0.0 \
     trainer.critic_warmup=0 \

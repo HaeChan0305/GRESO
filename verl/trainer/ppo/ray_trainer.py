@@ -609,16 +609,53 @@ class RayPPOTrainer(object):
         # Also report the average
         sum_acc = 0
         sum_count = 0
+        val_n = self.config.actor_rollout_ref.rollout.val_kwargs.n
+
+        sum_pass_at_n = 0
+        sum_best_at_n = 0
+        pass_at_n_count = 0
+
         for data_source, rewards in data_source_reward.items():
             rewards = np.array(rewards)
             #ignore the format score
             rewards[rewards < 0.95] = 0
-            metric_dict[f'val/test_score/{data_source}'] = np.mean(rewards)
-            print(f'>>> Test: val/test_score/{data_source}: {np.mean(rewards)}')
-            sum_acc += np.mean(rewards)
+
+            # === pass@n, best@n, mean@n ===
+            # rewards are interleaved: n consecutive entries per prompt
+            num_responses = len(rewards)
+            if num_responses >= val_n and val_n > 0:
+                num_prompts = num_responses // val_n
+                grouped = rewards[:num_prompts * val_n].reshape(num_prompts, val_n)
+                mean_at_n = np.mean(np.mean(grouped, axis=1))
+                pass_at_n = np.mean(np.any(grouped >= 0.95, axis=1).astype(float))
+                best_at_n = np.mean(np.max(grouped, axis=1))
+            else:
+                mean_at_n = np.mean(rewards)
+                pass_at_n = 0.0
+                best_at_n = 0.0
+
+            # Use MLILAB-GRPO naming: val-core/{ds}/acc/{metric}@{n}
+            metric_dict[f'val-core/{data_source}/acc/mean@{val_n}'] = mean_at_n
+            metric_dict[f'val-core/{data_source}/acc/best@{val_n}/mean'] = best_at_n
+            metric_dict[f'val-aux/{data_source}/acc/pass@{val_n}'] = pass_at_n
+            print(f'>>> Test: val-core/{data_source}/acc/mean@{val_n}: {mean_at_n}')
+            print(f'>>> Test: val-core/{data_source}/acc/best@{val_n}/mean: {best_at_n}')
+            print(f'>>> Test: val-aux/{data_source}/acc/pass@{val_n}: {pass_at_n}')
+
+            sum_acc += mean_at_n
             sum_count += 1
-        metric_dict['val/test_score/average'] = sum_acc / sum_count
-        print(f'>>> Test: val/test_score/average: {sum_acc / sum_count}')
+            sum_pass_at_n += pass_at_n
+            sum_best_at_n += best_at_n
+            pass_at_n_count += 1
+
+        metric_dict[f'val-core/average/acc/mean@{val_n}'] = sum_acc / sum_count
+        print(f'>>> Test: val-core/average/acc/mean@{val_n}: {sum_acc / sum_count}')
+
+        if pass_at_n_count > 0:
+            metric_dict[f'val-aux/average/acc/pass@{val_n}'] = sum_pass_at_n / pass_at_n_count
+            metric_dict[f'val-core/average/acc/best@{val_n}/mean'] = sum_best_at_n / pass_at_n_count
+            print(f'>>> Test: val-aux/average/acc/pass@{val_n}: {sum_pass_at_n / pass_at_n_count}')
+            print(f'>>> Test: val-core/average/acc/best@{val_n}/mean: {sum_best_at_n / pass_at_n_count}')
 
         return metric_dict
 
@@ -923,6 +960,8 @@ class RayPPOTrainer(object):
         # we start from step 1
         self.global_steps += 1
         last_val_metrics = None
+        _training_start_time = time.time()
+        _step_times = []
 
         sq_start = 0
         from collections import defaultdict
@@ -971,6 +1010,16 @@ class RayPPOTrainer(object):
         generation_time = 0
 
         if self.config.data.get('dynamic_filtering', False): acc_batch = None
+
+        # === GRESO rollout tracking counters (logging only, no training impact) ===
+        greso_dl_prompts = 0          # prompts loaded from DataLoader (before filtering)
+        greso_filtered_prompts = 0    # prompts surviving pre-rollout filter
+        greso_skipped_prompts = 0     # prompts skipped by GRESO pre-rollout filter
+        greso_rollout_count = 0       # number of rollout (generate_sequences) calls
+        greso_rollout_prompts = 0     # total prompts sent to rollout
+        greso_ds_additional_rollouts = 0  # additional rollout calls triggered by dynamic sampling
+        greso_first_rollout_done = False  # whether the first rollout of this iteration is done
+
         for epoch in range(self.start_epoch, self.config.trainer.total_epochs):
             self.current_epoch = epoch
             for batch_dict in self.train_dataloader:
@@ -984,8 +1033,18 @@ class RayPPOTrainer(object):
                     generation_time = 0
                     refresh_generation_time_flag = False
                     generation_start = time.time()
+                    # Reset GRESO rollout tracking counters for this iteration
+                    greso_dl_prompts = 0
+                    greso_filtered_prompts = 0
+                    greso_skipped_prompts = 0
+                    greso_rollout_count = 0
+                    greso_rollout_prompts = 0
+                    greso_ds_additional_rollouts = 0
+                    greso_first_rollout_done = False
 
                 if self.config.data.get('dynamic_filtering', False):
+                    _greso_pre_filter_size = len(batch)
+                    greso_dl_prompts += _greso_pre_filter_size
                     if self.config.data.dynamic_filtering_strategy == 'linear_backoff':
                         batch = self.data_profiler.filter_examples_linear_backoff(epoch, batch, self.config.data.filter_easy_n)
                     elif self.config.data.dynamic_filtering_strategy == 'all_probabilistic':
@@ -995,6 +1054,10 @@ class RayPPOTrainer(object):
                         pass
                     else:
                         raise NotImplementedError(f'Unknown dynamic filtering strategy {self.config.data.dynamic_filtering_strategy}')
+
+                    _greso_post_filter_size = len(batch)
+                    greso_filtered_prompts += _greso_post_filter_size
+                    greso_skipped_prompts += (_greso_pre_filter_size - _greso_post_filter_size)
 
                     if acc_batch is None:
                         acc_batch = batch
@@ -1033,6 +1096,13 @@ class RayPPOTrainer(object):
                     # generate a batch
                     print('start generation...')
                     start = time.time()
+                    # Track rollout call
+                    greso_rollout_count += 1
+                    greso_rollout_prompts += len(gen_batch)
+                    if greso_first_rollout_done:
+                        greso_ds_additional_rollouts += 1
+                    else:
+                        greso_first_rollout_done = True
                     with _timer('gen', timing_raw):
                         gen_batch_output = self.actor_rollout_wg.generate_sequences(gen_batch)
                     print(f'generation time: {time.time() - start}')
@@ -1194,7 +1264,38 @@ class RayPPOTrainer(object):
                     print(f'Total generation time: {generation_time}')
                     # log generation time in metrics
                     metrics.update({'timing_s/total_generation_time': generation_time})
-                    # import ipdb; ipdb.set_trace()
+
+                    # === GRESO rollout tracking log ===
+                    print(f'[GRESO-TRACK] step={self.global_steps} | '
+                          f'dl_prompts={greso_dl_prompts} | '
+                          f'filtered_prompts={greso_filtered_prompts} | '
+                          f'skipped_by_greso={greso_skipped_prompts} | '
+                          f'skip_ratio={greso_skipped_prompts / max(greso_dl_prompts, 1):.3f} | '
+                          f'rollout_count_total={greso_rollout_count} | '
+                          f'first_rollout=1 | '
+                          f'ds_additional_rollouts={greso_ds_additional_rollouts} | '
+                          f'total_rollout_prompts={greso_rollout_prompts}')
+                    metrics.update({
+                        'greso_track/dl_prompts': greso_dl_prompts,
+                        'greso_track/filtered_prompts': greso_filtered_prompts,
+                        'greso_track/skipped_by_greso': greso_skipped_prompts,
+                        'greso_track/skip_ratio': greso_skipped_prompts / max(greso_dl_prompts, 1),
+                        'greso_track/rollout_count_total': greso_rollout_count,
+                        'greso_track/ds_additional_rollouts': greso_ds_additional_rollouts,
+                        'greso_track/total_rollout_prompts': greso_rollout_prompts,
+                    })
+
+                    # === ETA calculation ===
+                    _step_times.append(time.time() - _training_start_time if len(_step_times) == 0
+                                       else time.time() - _training_start_time - sum(_step_times))
+                    _avg_step_time = sum(_step_times) / len(_step_times)
+                    _remaining_steps = self.total_training_steps - self.global_steps
+                    _eta_seconds = _remaining_steps * _avg_step_time
+                    _eta_h, _eta_m = int(_eta_seconds // 3600), int((_eta_seconds % 3600) // 60)
+                    print(f'[ETA] step {self.global_steps}/{self.total_training_steps} | '
+                          f'avg_step={_avg_step_time:.1f}s | '
+                          f'remaining={_remaining_steps} steps | '
+                          f'ETA={_eta_h}h {_eta_m}m')
 
                     # adjust exploration factor
                     hard_data_ratio = hard_data_num / total_num

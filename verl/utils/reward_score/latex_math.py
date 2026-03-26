@@ -108,12 +108,8 @@ def compute_score(prompt_str, solution_str, ground_truth, format_score=0.1, full
             return full_score
         else:
             if do_print: print(f">> Answer validation: MISMATCH")
-            if do_print: print(f">> Score: {format_score}")
-            # print("&"*80)
-            # print("Ans: ", ans_string)
-            # print("GT: ", ground_truth)
-            # print("&"*80)
-            return format_score
+            if do_print: print(f">> Score: {0.0}")
+            return 0.0
     except Exception as e:
         print(e)
         print("@@@"*20)
