@@ -1,0 +1,23 @@
+Looking in indexes: https://pypi.org/simple, https://pypi.ngc.nvidia.com
+Requirement already satisfied: gguf in /home/irteam/greso-env/lib/python3.10/site-packages (0.10.0)
+Collecting lm-format-enforcer<0.11,>=0.10.11
+  Downloading lm_format_enforcer-0.10.12-py3-none-any.whl.metadata (17 kB)
+Requirement already satisfied: interegular>=0.3.2 in /usr/local/lib/python3.10/dist-packages (from lm-format-enforcer<0.11,>=0.10.11) (0.3.3)
+Requirement already satisfied: packaging in /usr/local/lib/python3.10/dist-packages (from lm-format-enforcer<0.11,>=0.10.11) (23.2)
+Requirement already satisfied: pydantic>=1.10.8 in /usr/local/lib/python3.10/dist-packages (from lm-format-enforcer<0.11,>=0.10.11) (2.11.5)
+Requirement already satisfied: pyyaml in /usr/local/lib/python3.10/dist-packages (from lm-format-enforcer<0.11,>=0.10.11) (6.0.2)
+Requirement already satisfied: numpy>=1.17 in /usr/local/lib/python3.10/dist-packages (from gguf) (1.26.4)
+Requirement already satisfied: tqdm>=4.27 in /usr/local/lib/python3.10/dist-packages (from gguf) (4.66.5)
+Requirement already satisfied: annotated-types>=0.6.0 in /usr/local/lib/python3.10/dist-packages (from pydantic>=1.10.8->lm-format-enforcer<0.11,>=0.10.11) (0.7.0)
+Requirement already satisfied: pydantic-core==2.33.2 in /usr/local/lib/python3.10/dist-packages (from pydantic>=1.10.8->lm-format-enforcer<0.11,>=0.10.11) (2.33.2)
+Requirement already satisfied: typing-extensions>=4.12.2 in /usr/local/lib/python3.10/dist-packages (from pydantic>=1.10.8->lm-format-enforcer<0.11,>=0.10.11) (4.12.2)
+Requirement already satisfied: typing-inspection>=0.4.0 in /usr/local/lib/python3.10/dist-packages (from pydantic>=1.10.8->lm-format-enforcer<0.11,>=0.10.11) (0.4.1)
+Downloading lm_format_enforcer-0.10.12-py3-none-any.whl (44 kB)
+Installing collected packages: lm-format-enforcer
+  Attempting uninstall: lm-format-enforcer
+    Found existing installation: lm-format-enforcer 0.10.6
+    Uninstalling lm-format-enforcer-0.10.6:
+      Successfully uninstalled lm-format-enforcer-0.10.6
+ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+vllm 0.8.5.post1 requires gguf>=0.13.0, but you have gguf 0.10.0 which is incompatible.
+Successfully installed lm-format-enforcer-0.10.12

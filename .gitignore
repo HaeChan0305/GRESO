@@ -9,6 +9,7 @@ core
 **/_build/
 **/*.ckpt
 **/outputs
+**/models
 **/*.tar.gz
 **/playground
 **/wandb

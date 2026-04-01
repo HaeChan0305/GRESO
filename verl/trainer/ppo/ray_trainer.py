@@ -798,7 +798,7 @@ class RayPPOTrainer(object):
 
         # Keep only the latest n checkpoints
         n=2
-        if self.config.trainer.get('keep_all_ckpts', False):  # Remove old checkpoints
+        if self.config.trainer.get('keep_all_ckpts', True):  # Remove old checkpoints
             return
 
         checkpoint_dirs = [d for d in os.listdir(self.config.trainer.default_local_dir)

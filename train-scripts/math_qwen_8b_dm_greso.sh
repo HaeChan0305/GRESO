@@ -23,9 +23,9 @@ export WANDB_API_KEY="79f4decc1667e5ef75c38f236c356ee5cc1c764b"
 export WANDB_PROJECT="GRPO"
 export WANDB_ENTITY="haechan-kaist"  # optional if using teams
 export WANDB_MODE="online"  # or "offline", "disabled"
-# export WANDB_RUN_ID="75h60ujw"
+export WANDB_RUN_ID="jai7ku2x"
 export HYDRA_FULL_ERROR=1
-# export WANDB_RESUME='must'
+export WANDB_RESUME='must'
 
 experiment_name="qwen3-8b-greso-paper-batch128-cliph0_28-clipl0_2-clipc3-nokl-lr1e-6-binreward"
 save_path="./models/$experiment_name"
@@ -37,7 +37,7 @@ python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files=/home/irteam/MLILAB-GRPO/data/DAPO/train_17288.parquet \
     data.val_files=[/home/irteam/MLILAB-GRPO/data/MATH500/test.parquet,/home/irteam/MLILAB-GRPO/data/AIME2024/test.parquet,/home/irteam/MLILAB-GRPO/data/AIME2025/test.parquet,/home/irteam/MLILAB-GRPO/data/Minerva/test.parquet,/home/irteam/MLILAB-GRPO/data/AMC2024/test.parquet] \
-    data.train_batch_size=128 \
+    data.train_batch_size=192 \
     +data.dynamic_filtering=True \
     +data.dynamic_filtering_strategy=all_probabilistic \
     +data.p_easy=0.5 \
@@ -63,11 +63,11 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.kl_loss_type=low_var_kl \
     actor_rollout_ref.actor.entropy_coeff=0 \
     actor_rollout_ref.actor.fsdp_config.param_offload=False \
-    actor_rollout_ref.actor.fsdp_config.optimizer_offload=False \
+    actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
     actor_rollout_ref.rollout.disable_log_stats=False \
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
     actor_rollout_ref.rollout.name=vllm \
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.9 \
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.8 \
     actor_rollout_ref.rollout.temperature=1.0 \
     actor_rollout_ref.rollout.top_k=-1 \
     actor_rollout_ref.rollout.top_p=1 \
@@ -89,5 +89,5 @@ python3 -m verl.trainer.main_ppo \
     trainer.save_freq=$freq \
     trainer.default_local_dir=$save_path \
     trainer.test_freq=$freq \
-    trainer.total_epochs=4 \
-    +trainer.val_before_train=True $@
+    trainer.total_epochs=5 \
+    +trainer.val_before_train=False $@
